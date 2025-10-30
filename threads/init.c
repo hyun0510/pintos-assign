@@ -424,5 +424,5 @@ locate_block_device (enum block_type role, const char *name)
             block_set_role (role, block);
         }
 }
-#endi
-Uuuuuuuuudslfkjahskjhkdjdjdjf
+#endif
+

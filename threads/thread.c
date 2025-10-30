@@ -218,11 +218,11 @@ thread_create (const char *name, int priority,
 }
 
 bool 
-thread_compare_priority(const struct list_elem* a, const struct list_elem* b, void* aux UNUSED)
+thread_compare_priority(const struct list_elem* a, const struct list_elem* b, void *aux UNUSED)
 {
-    struct thread* a = list_entry(a, struct thread, elem);
-    struct thread* b = list_entry(b, struct thread, elem);
-    return a->priority > b->priorityS
+    struct thread* thread_a = list_entry(a, struct thread, elem);
+    struct thread* thread_b = list_entry(b, struct thread, elem);
+    return thread_a->priority > thread_b->priority;
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled
@@ -387,7 +387,7 @@ thread_yield (void)
 
     old_level = intr_disable ();
     if (cur != idle_thread)
-        list_insert_ordered(&ready_list, &t->elem, thread_compare_priority, NULL);
+        list_insert_ordered(&ready_list, &cur->elem, thread_compare_priority, NULL);
     cur->status = THREAD_READY;
     schedule ();
     intr_set_level (old_level);
