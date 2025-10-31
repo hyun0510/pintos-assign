@@ -4,6 +4,9 @@
 #include <list.h>
 #include <stdbool.h>
 
+//new func
+bool sema_compare_priority(const struct list_elem* a, const struct list_elem* b, void *aux);
+
 /* A counting semaphore. */
 struct semaphore
 {

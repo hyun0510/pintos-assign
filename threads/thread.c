@@ -75,6 +75,26 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+
+bool 
+thread_compare_priority(const struct list_elem* a, const struct list_elem* b, void *aux UNUSED)
+{
+    struct thread* thread_a = list_entry(a, struct thread, elem);
+    struct thread* thread_b = list_entry(b, struct thread, elem);
+    return thread_a->priority > thread_b->priority;
+}
+
+void 
+cmp_running_thread_ready_list(void)
+{
+    if(!list_empty(&ready_list) && thread_current()->priority < list_entry(list_front(&ready_list), struct thread, elem)->priority)
+    {
+        thread_yield();
+    }
+}
+
+
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -213,17 +233,13 @@ thread_create (const char *name, int priority,
 
     /* Add to run queue. */
     thread_unblock (t);
+    cmp_running_thread_ready_list();
 
     return tid;
 }
 
-bool 
-thread_compare_priority(const struct list_elem* a, const struct list_elem* b, void *aux UNUSED)
-{
-    struct thread* thread_a = list_entry(a, struct thread, elem);
-    struct thread* thread_b = list_entry(b, struct thread, elem);
-    return thread_a->priority > thread_b->priority;
-}
+
+
 
 /* Puts the current thread to sleep.  It will not be scheduled
    again until awoken by thread_unblock().
@@ -415,6 +431,7 @@ void
 thread_set_priority (int new_priority)
 {
     thread_current ()->priority = new_priority;
+    cmp_running_thread_ready_list();
 }
 
 /* Returns the current thread's priority. */
