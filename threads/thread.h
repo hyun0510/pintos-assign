@@ -88,6 +88,9 @@ struct thread
     char name[16];             /* Name (for debugging purposes). */
     uint8_t *stack;            /* Saved stack pointer. */
     int priority;              /* Priority. */
+    int age;
+    int queue_level;
+    int time_slice;
     struct list_elem allelem;  /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
@@ -110,9 +113,11 @@ struct thread
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
 
+
 //new func
 bool thread_compare_priority(const struct list_elem* a, const struct list_elem* b, void *aux UNUSED);
 void cmp_running_thread_ready_list(void);
+void aging(void);
 
 void thread_init (void);
 void thread_start (void);

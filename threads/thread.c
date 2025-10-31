@@ -62,6 +62,8 @@ static unsigned thread_ticks; /* # of timer ticks since last yield. */
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 bool thread_mlfqs;
+static struct list mlfq_list[3];
+static int MLFQ_TIMESLICE[3] = {2, 4, 8};
 
 static void kernel_thread (thread_func *, void *aux);
 
@@ -75,7 +77,7 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
-
+//new func-----------------------------------------------
 bool 
 thread_compare_priority(const struct list_elem* a, const struct list_elem* b, void *aux UNUSED)
 {
@@ -93,7 +95,33 @@ cmp_running_thread_ready_list(void)
     }
 }
 
-
+void
+aging(void)
+{
+    struct list_elem *e = list_begin(&ready_list);
+    while(e != list_end(&ready_list))
+    {
+        struct list_elem *next_e = list_next(e);
+        struct thread *t = list_entry(e, struct thread, elem);
+        t->age++;
+        
+        if(t->age >=20)
+        {
+            if(t->priority < PRI_MAX)
+            {
+                t->priority++;
+                struct list_elem *prev_e = list_prev(e);
+                if(e != list_front(&ready_list) && t->priority > list_entry(prev_e, struct thread, elem)->priority)
+                {
+                    list_remove(e);
+                    list_insert_ordered(&ready_list, e, thread_compare_priority, NULL);                    
+                }
+            }
+            t->age = 0;
+        }
+        e = next_e;
+    }
+}
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -112,7 +140,15 @@ void
 thread_init (void)
 {
     ASSERT (intr_get_level () == INTR_OFF);
-
+    
+    if(thread_mlfqs)
+    {
+        for(int i = 0; i<3; i++)
+        {
+            list_init(&mlfq_list[i]);
+        }
+    }
+    
     lock_init (&tid_lock);
     list_init (&ready_list);
     list_init (&all_list);
@@ -158,10 +194,50 @@ thread_tick (void)
 #endif
     else
         kernel_ticks++;
+        
+    if(thread_mlfqs)
+    {
+        t->time_slice++;
+        
+        for(int i = 0; i<3; i++)
+        {
+            struct list_elem *e;
+            for(e = list_begin(&mlfq_list[i]); e != list_end(&mlfq_list[i]); e = list_next(e))
+            {
+                struct thread *th = list_entry(e, struct thread, elem);
+                th->age++;
+                if(th->age >= 20 && th->queue_level > 0)
+                {
+                  th->queue_level--;
+                  t->priority = 3-(t->queue_level);
+                  th->age = 0;
+                  list_remove(&th->elem);
+                  list_push_back(&mlfq_list[th->queue_level], &th->elem);
+                }
+            }
+        }
+        int limit = MLFQ_TIMESLICE[t->queue_level];
+        if(t != idle_thread && t->time_slice >= limit)
+        {
+            if(t->queue_level < 2)
+                t->queue_level++;
+            t->priority = 3-(t->queue_level);
+            t->time_slice = 0;
+            intr_yield_on_return();
+        }
+        return;
+        
+    }
 
     /* Enforce preemption. */
     if (++thread_ticks >= TIME_SLICE)
         intr_yield_on_return ();
+    
+    aging();
+    if(!list_empty(&ready_list) && t->priority < list_entry(list_front(&ready_list), struct thread, elem)->priority)
+    {
+        intr_yield_on_return();
+    }
 }
 
 /* Prints thread statistics. */
@@ -234,6 +310,7 @@ thread_create (const char *name, int priority,
     /* Add to run queue. */
     thread_unblock (t);
     cmp_running_thread_ready_list();
+    
 
     return tid;
 }
@@ -274,9 +351,14 @@ thread_unblock (struct thread *t)
 
     old_level = intr_disable ();
     ASSERT (t->status == THREAD_BLOCKED);
-    //list_push_back (&ready_list, &t->elem);
-    list_insert_ordered(&ready_list, &t->elem, thread_compare_priority, NULL);
+    if(thread_mlfqs)
+        list_push_back(&mlfq_list[t->queue_level], &t->elem);
+    else
+        //list_push_back (&ready_list, &t->elem);
+        list_insert_ordered(&ready_list, &t->elem, thread_compare_priority, NULL);
     t->status = THREAD_READY;
+    t->age = 0;
+  
     intr_set_level (old_level);
 }
 
@@ -403,7 +485,10 @@ thread_yield (void)
 
     old_level = intr_disable ();
     if (cur != idle_thread)
-        list_insert_ordered(&ready_list, &cur->elem, thread_compare_priority, NULL);
+        if(thread_mlfqs)
+            list_push_back(&mlfq_list[cur->queue_level], &cur->elem);
+        else
+            list_insert_ordered(&ready_list, &cur->elem, thread_compare_priority, NULL);
     cur->status = THREAD_READY;
     schedule ();
     intr_set_level (old_level);
@@ -557,6 +642,9 @@ init_thread (struct thread *t, const char *name, int priority)
     t->stack = (uint8_t *)t + PGSIZE;
     t->priority = priority;
     t->magic = THREAD_MAGIC;
+    t->age = 0;
+    t->queue_level = 0;
+    t->time_slice = 0;
     list_push_back (&all_list, &t->allelem);
 }
 
@@ -581,6 +669,16 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void)
 {
+    if(thread_mlfqs)
+    {
+        for(int i = 0; i<3; i++)
+        {
+            if(!list_empty(&mlfq_list[i]))
+                return list_entry(list_pop_front(&mlfq_list[i]), struct thread, elem);
+        }
+        return idle_thread;
+    }
+
     if (list_empty (&ready_list))
         return idle_thread;
     else
