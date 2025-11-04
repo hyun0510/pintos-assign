@@ -62,6 +62,7 @@ static unsigned thread_ticks; /* # of timer ticks since last yield. */
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 bool thread_mlfqs;
+
 static struct list mlfq_list[3];
 static int MLFQ_TIMESLICE[3] = {2, 4, 8};
 
@@ -488,6 +489,7 @@ thread_yield (void)
         if(thread_mlfqs)
             list_push_back(&mlfq_list[cur->queue_level], &cur->elem);
         else
+            //list_push_back (&ready_list, &t->elem);
             list_insert_ordered(&ready_list, &cur->elem, thread_compare_priority, NULL);
     cur->status = THREAD_READY;
     schedule ();
